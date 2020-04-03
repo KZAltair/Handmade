@@ -1,3 +1,6 @@
+/* Developed by Ivan Massyutin*/
+/*Copywrite by Ivan Massyutin*/
+
 #include <Windows.h>
 #include <stdint.h>
 
