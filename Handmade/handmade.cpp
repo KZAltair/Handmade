@@ -3,6 +3,7 @@
 
 #include <Windows.h>
 #include <stdint.h>
+#include <Xinput.h>
 
 #define internal static //data avaliable only to this file where it is
 #define local_persist static 
@@ -39,7 +40,41 @@ struct win32_window_dimension
 	int Height;
 };
 
-win32_window_dimension Win32GetWindowDimension(HWND Window)
+//Macro defines function with xinputgetstate
+#define XINPUT_GET_STATE(name) DWORD WINAPI name(DWORD dwUserIndex, XINPUT_STATE* pState)
+typedef XINPUT_GET_STATE(xinput_get_state);
+
+XINPUT_GET_STATE(XInputGetStateStub)
+{
+	return 0;
+}
+global_variable xinput_get_state* XInputGetState_ = XInputGetStateStub;
+#define XInputGetState XInputGetState_
+
+#define XINPUT_SET_STATE(name) DWORD WINAPI name(DWORD dwUserIndex, XINPUT_VIBRATION* pVibration)
+typedef XINPUT_SET_STATE(xinput_set_state);
+
+XINPUT_SET_STATE(XInputSetStateStub)
+{
+	return 0;
+}
+global_variable xinput_set_state* XInputSetState_ = XInputSetStateStub;
+#define XInputSetState XInputSetState_
+
+internal void
+Win32LoadXInput()
+{
+	HMODULE XInputLibrary = LoadLibraryA("xinput1_4.dll");
+	//Load functions from dll
+	if (XInputLibrary)
+	{
+		XInputGetState = (xinput_get_state*)GetProcAddress(XInputLibrary, "XInputGetState");
+		XInputSetState = (xinput_set_state*)GetProcAddress(XInputLibrary, "XInputSetState");
+	}
+}
+
+internal win32_window_dimension 
+Win32GetWindowDimension(HWND Window)
 {
 	win32_window_dimension Result;
 	RECT clientRect;
@@ -51,21 +86,21 @@ win32_window_dimension Win32GetWindowDimension(HWND Window)
 }
 
 internal void
-RenderGradient(win32_offscreen_buffer Buffer, int xOffset, int yOffset)
+RenderGradient(win32_offscreen_buffer* Buffer, int xOffset, int yOffset)
 {
 	//Fill in the pixels
 
-	uint8* Row = (uint8*)Buffer.Memory;
-	for (int y = 0; y < Buffer.Height; ++y)
+	uint8* Row = (uint8*)Buffer->Memory;
+	for (int y = 0; y < Buffer->Height; ++y)
 	{
 		uint32* Pixel = (uint32*)Row;
-		for (int x = 0; x < Buffer.Width; ++x)
+		for (int x = 0; x < Buffer->Width; ++x)
 		{
 			uint8 Blue = x + xOffset;
 			uint8 Green = y + yOffset;
 			*Pixel++ = ((Green << 8) | Blue);
 		}
-		Row += Buffer.Pitch;
+		Row += Buffer->Pitch;
 	}
 }
 
@@ -98,22 +133,22 @@ Win32ResizeDIBSection(win32_offscreen_buffer* Buffer, int Width, int Height)
 }
 
 internal void
-Win32UpdateWindow(HDC DeviceContext, int WindowWidth, int WindowHeight, 
-				  win32_offscreen_buffer Buffer, int X, int Y, int Width, int Height)
+Win32UpdateWindow(win32_offscreen_buffer* Buffer, HDC DeviceContext, int WindowWidth, int WindowHeight,
+				   int X, int Y, int Width, int Height)
 {
 	StretchDIBits(
 		DeviceContext,
 		0, 0, WindowWidth, WindowHeight,
-		0, 0, Buffer.Width, Buffer.Height,
-		Buffer.Memory,
-		&Buffer.Info,
+		0, 0, Buffer->Width, Buffer->Height,
+		Buffer->Memory,
+		&Buffer->Info,
 		DIB_RGB_COLORS,
 		SRCCOPY
 	);
 
 }
 
-LRESULT CALLBACK Win32WindowProc(HWND Window, UINT msg, WPARAM wParam, LPARAM lParam)
+internal LRESULT CALLBACK Win32WindowProc(HWND Window, UINT msg, WPARAM wParam, LPARAM lParam)
 {
 	LRESULT Result = 0;
 	switch (msg)
@@ -135,6 +170,73 @@ LRESULT CALLBACK Win32WindowProc(HWND Window, UINT msg, WPARAM wParam, LPARAM lP
 		{
 
 		}break;
+		case WM_SYSKEYDOWN:
+		case WM_SYSKEYUP:
+		case WM_KEYDOWN:
+		case WM_KEYUP:
+		{
+			uint32 VKCode = wParam;
+			bool wasDown = ((lParam& (1 << 30)) != 0);
+			bool isDown = ((lParam & (1 << 31)) == 0);
+			if (isDown != wasDown)
+			{
+				if (VKCode == 'W')
+				{
+
+				}
+				else if (VKCode == 'A')
+				{
+
+				}
+				else if (VKCode == 'D')
+				{
+
+				}
+				else if (VKCode == 'S')
+				{
+
+				}
+				else if (VKCode == 'Q')
+				{
+
+				}
+				else if (VKCode == 'E')
+				{
+
+				}
+				else if (VKCode == VK_UP)
+				{
+
+				}
+				else if (VKCode == VK_LEFT)
+				{
+
+				}
+				else if (VKCode == VK_RIGHT)
+				{
+
+				}
+				else if (VKCode == VK_DOWN)
+				{
+
+				}
+				else if (VKCode == VK_ESCAPE)
+				{
+					if (isDown)
+					{
+						OutputDebugStringA("isDown\n");
+					}
+					if (wasDown)
+					{
+						OutputDebugStringA("wasDown\n");
+					}
+				}
+				else if (VKCode == VK_SPACE)
+				{
+
+				}
+			}
+		}break;
 		case WM_PAINT:
 		{
 			PAINTSTRUCT Paint;
@@ -145,8 +247,8 @@ LRESULT CALLBACK Win32WindowProc(HWND Window, UINT msg, WPARAM wParam, LPARAM lP
 			int Width = Paint.rcPaint.right - Paint.rcPaint.left;
 
 			win32_window_dimension Dimension = Win32GetWindowDimension(Window);
-			Win32UpdateWindow(DeviceContext, Dimension.Width, Dimension.Height, 
-								GlobalBackBuffer, X, Y, Width, Height);
+			Win32UpdateWindow(&GlobalBackBuffer, DeviceContext, Dimension.Width, Dimension.Height,
+								 X, Y, Width, Height);
 			EndPaint(Window, &Paint);
 
 		}break;
@@ -161,7 +263,8 @@ LRESULT CALLBACK Win32WindowProc(HWND Window, UINT msg, WPARAM wParam, LPARAM lP
 
 int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow)
 {
-	WNDCLASS windowClass = {};
+	Win32LoadXInput();
+	WNDCLASSA windowClass = {};
 	Win32ResizeDIBSection(&GlobalBackBuffer, 1280, 720);
 	windowClass.style = CS_HREDRAW | CS_VREDRAW;
 	windowClass.lpfnWndProc = Win32WindowProc;
@@ -191,6 +294,8 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLi
 			while(Running)
 			{
 				MSG Message;
+
+				//All messages including keyboard are coming through this loop
 				while (PeekMessage(&Message,0,0, 0, PM_REMOVE))
 				{
 					if (Message.message == WM_QUIT)
@@ -200,12 +305,51 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLi
 					TranslateMessage(&Message);
 					DispatchMessageA(&Message);
 				}
-				RenderGradient(GlobalBackBuffer, xOffset, yOffset);
+
+				//TODO(ivan): Should it be pulled more frequently?
+
+				//Steps to setup:
+				//1: Loop through max controllers available - max 4
+				//2: Get Controller state
+				for (DWORD ControllerIndex = 0; ControllerIndex < XUSER_MAX_COUNT; ControllerIndex++)
+				{
+					XINPUT_STATE ControllerState;
+					if (XInputGetState(ControllerIndex, &ControllerState) == ERROR_SUCCESS)
+					{
+						//NOTE: This controller is plugged in
+						XINPUT_GAMEPAD* Pad = &ControllerState.Gamepad;
+
+						//List of all possible buttons at XBOX controller
+						bool Up = (Pad->wButtons & XINPUT_GAMEPAD_DPAD_UP);
+						bool Left = (Pad->wButtons & XINPUT_GAMEPAD_DPAD_LEFT);
+						bool Right = (Pad->wButtons & XINPUT_GAMEPAD_DPAD_RIGHT);
+						bool Down = (Pad->wButtons & XINPUT_GAMEPAD_DPAD_DOWN);
+						bool Start = (Pad->wButtons & XINPUT_GAMEPAD_START);
+						bool Back = (Pad->wButtons & XINPUT_GAMEPAD_BACK);
+						bool LeftThumb = (Pad->wButtons & XINPUT_GAMEPAD_LEFT_THUMB);
+						bool RightThumb = (Pad->wButtons & XINPUT_GAMEPAD_RIGHT_THUMB);
+						bool LeftShoulder = (Pad->wButtons & XINPUT_GAMEPAD_LEFT_SHOULDER);
+						bool RightShoulder = (Pad->wButtons & XINPUT_GAMEPAD_RIGHT_SHOULDER);
+						bool AButton = (Pad->wButtons & XINPUT_GAMEPAD_A);
+						bool BButton = (Pad->wButtons & XINPUT_GAMEPAD_B);
+						bool XButton = (Pad->wButtons & XINPUT_GAMEPAD_X);
+						bool YButton = (Pad->wButtons & XINPUT_GAMEPAD_Y);
+
+						int16 StickX = Pad->sThumbLX;
+						int16 StickY = Pad->sThumbLY;
+					}
+					else
+					{
+						//NOTE: The controller is not avalable
+					}
+				}
+
+				RenderGradient(&GlobalBackBuffer, xOffset, yOffset);
 
 				HDC DeviceContext = GetDC(Window);
 				win32_window_dimension Dimension = Win32GetWindowDimension(Window);;
-				Win32UpdateWindow(DeviceContext, Dimension.Width, Dimension.Height, 
-									GlobalBackBuffer, 0, 0, Dimension.Width, Dimension.Height);
+				Win32UpdateWindow(&GlobalBackBuffer, DeviceContext, Dimension.Width, Dimension.Height,
+									 0, 0, Dimension.Width, Dimension.Height);
 				ReleaseDC(Window, DeviceContext);
 				++xOffset;
 			}
