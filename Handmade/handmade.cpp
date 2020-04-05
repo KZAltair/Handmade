@@ -4,6 +4,7 @@
 #include <Windows.h>
 #include <stdint.h>
 #include <Xinput.h>
+#include <dsound.h>
 
 #define internal static //data avaliable only to this file where it is
 #define local_persist static 
@@ -61,6 +62,10 @@ XINPUT_SET_STATE(XInputSetStateStub)
 global_variable xinput_set_state* XInputSetState_ = XInputSetStateStub;
 #define XInputSetState XInputSetState_
 
+#define DIRECT_SOUND_CREATE(name)HRESULT WINAPI name(LPCGUID pcGuidDevice, LPDIRECTSOUND *ppDS, LPUNKNOWN pUnkOuter);
+typedef DIRECT_SOUND_CREATE(direct_sound_create);
+
+
 internal void
 Win32LoadXInput()
 {
@@ -75,6 +80,80 @@ Win32LoadXInput()
 	{
 		XInputGetState = (xinput_get_state*)GetProcAddress(XInputLibrary, "XInputGetState");
 		XInputSetState = (xinput_set_state*)GetProcAddress(XInputLibrary, "XInputSetState");
+	}
+	else
+	{
+		//TODO(ivan): Log error
+	}
+}
+
+internal void
+Win32InitDSound(HWND Window, int32 SamplesPerSecond, int32 BufferSize)
+{
+	//Steps:
+	//1.Load dll library
+	HMODULE DSoundLibrary = LoadLibraryA("dsound.dll");
+	
+	if (DSoundLibrary)
+	{
+		//2. Get DirectSound object as it is COM
+		direct_sound_create* DirectSoundCreate = (direct_sound_create*)GetProcAddress(DSoundLibrary, "DirectSoundCreate");
+
+		LPDIRECTSOUND DirectSound;
+		if (DirectSoundCreate && SUCCEEDED(DirectSoundCreate(0, &DirectSound, 0)))
+		{
+			WAVEFORMATEX waveFormat = {};
+			waveFormat.wFormatTag = WAVE_FORMAT_PCM;
+			waveFormat.nChannels = 2;
+			waveFormat.nSamplesPerSec = SamplesPerSecond;
+			waveFormat.wBitsPerSample = 16; //CD audio standard
+			waveFormat.nBlockAlign = (waveFormat.nChannels * waveFormat.wBitsPerSample) / 8;
+			waveFormat.nAvgBytesPerSec = waveFormat.nSamplesPerSec * waveFormat.nBlockAlign;
+			waveFormat.cbSize = 0;
+
+			if (SUCCEEDED(DirectSound->SetCooperativeLevel(Window, DSSCL_PRIORITY)))
+			{
+				DSBUFFERDESC BufferDescription = {};
+				BufferDescription.dwSize = sizeof(BufferDescription);
+				BufferDescription.dwFlags = DSBCAPS_PRIMARYBUFFER;
+
+				//3. Create a primary buffer to set the mode
+				LPDIRECTSOUNDBUFFER PrimaryBuffer;
+				if (SUCCEEDED(DirectSound->CreateSoundBuffer(&BufferDescription, &PrimaryBuffer, 0)))
+				{
+					HRESULT Error = PrimaryBuffer->SetFormat(&waveFormat);
+					if (SUCCEEDED(Error))
+					{
+						OutputDebugStringA("Primary buffer was set\n");
+					}
+					else
+					{
+						//TODO(ivan): Log error for setting primary buffer
+					}
+				}
+			}
+			else
+			{
+				//TODO(ivan): Log error for cooperative level
+			}
+			//4. Create a secondary buffer
+			DSBUFFERDESC BufferDescription = {};
+			BufferDescription.dwSize = sizeof(BufferDescription);
+			BufferDescription.dwFlags = 0;
+			BufferDescription.dwBufferBytes = BufferSize;
+			BufferDescription.lpwfxFormat = &waveFormat;
+			LPDIRECTSOUNDBUFFER SecondaryBuffer;
+			HRESULT Error = DirectSound->CreateSoundBuffer(&BufferDescription, &SecondaryBuffer, 0);
+			if (SUCCEEDED(Error))
+			{
+				OutputDebugStringA("Secondary buffer was set\n");
+				//5. Start it player
+			}
+		}
+		else
+		{
+			//TODO(ivan): log error
+		}
 	}
 }
 
@@ -300,6 +379,7 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLi
 		{
 			int xOffset = 0;
 			int yOffset = 0;
+			Win32InitDSound(Window, 48000, (48000*sizeof(int16))*2); //Dsound require a window to be created
 			Running = true;
 			while(Running)
 			{
