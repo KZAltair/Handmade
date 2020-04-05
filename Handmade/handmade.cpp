@@ -46,7 +46,7 @@ typedef XINPUT_GET_STATE(xinput_get_state);
 
 XINPUT_GET_STATE(XInputGetStateStub)
 {
-	return 0;
+	return ERROR_DEVICE_NOT_CONNECTED;
 }
 global_variable xinput_get_state* XInputGetState_ = XInputGetStateStub;
 #define XInputGetState XInputGetState_
@@ -56,7 +56,7 @@ typedef XINPUT_SET_STATE(xinput_set_state);
 
 XINPUT_SET_STATE(XInputSetStateStub)
 {
-	return 0;
+	return ERROR_DEVICE_NOT_CONNECTED;
 }
 global_variable xinput_set_state* XInputSetState_ = XInputSetStateStub;
 #define XInputSetState XInputSetState_
@@ -64,7 +64,12 @@ global_variable xinput_set_state* XInputSetState_ = XInputSetStateStub;
 internal void
 Win32LoadXInput()
 {
+	//If 1.4 not exists
 	HMODULE XInputLibrary = LoadLibraryA("xinput1_4.dll");
+	if (!XInputLibrary)
+	{
+		XInputLibrary = LoadLibraryA("xinput1_3.dll");
+	}
 	//Load functions from dll
 	if (XInputLibrary)
 	{
@@ -175,7 +180,7 @@ internal LRESULT CALLBACK Win32WindowProc(HWND Window, UINT msg, WPARAM wParam, 
 		case WM_KEYDOWN:
 		case WM_KEYUP:
 		{
-			uint32 VKCode = wParam;
+			uint32 VKCode = (uint32)wParam;
 			bool wasDown = ((lParam& (1 << 30)) != 0);
 			bool isDown = ((lParam & (1 << 31)) == 0);
 			if (isDown != wasDown)
@@ -235,6 +240,11 @@ internal LRESULT CALLBACK Win32WindowProc(HWND Window, UINT msg, WPARAM wParam, 
 				{
 
 				}
+			}
+			bool AltKeyWasDown = ((lParam & (1 << 29)) != 0);
+			if ((VKCode == VK_F4) && AltKeyWasDown)
+			{
+				Running = false;
 			}
 		}break;
 		case WM_PAINT:
