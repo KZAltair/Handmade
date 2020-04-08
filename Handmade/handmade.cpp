@@ -5,6 +5,7 @@
 #include <stdint.h>
 #include <Xinput.h>
 #include <dsound.h>
+#include <string>
 #include <math.h>
 
 #define internal static //data avaliable only to this file where it is
@@ -22,6 +23,7 @@ typedef int8_t int8;
 typedef int16_t int16;
 typedef int32_t int32;
 typedef int64_t int64;
+typedef int32 bool32;
 
 typedef float real32;
 typedef double real64;
@@ -38,7 +40,7 @@ struct win32_offscreen_buffer
 };
 
 //TODO(ivan): exclude global variable later
-global_variable bool Running;
+global_variable bool32 Running;
 global_variable win32_offscreen_buffer GlobalBackBuffer;
 global_variable LPDIRECTSOUNDBUFFER GlobalSecondaryBuffer;
 
@@ -318,8 +320,8 @@ internal LRESULT CALLBACK Win32WindowProc(HWND Window, UINT msg, WPARAM wParam, 
 		case WM_KEYUP:
 		{
 			uint32 VKCode = (uint32)wParam;
-			bool wasDown = ((lParam& (1 << 30)) != 0);
-			bool isDown = ((lParam & (1 << 31)) == 0);
+			bool32 wasDown = ((lParam& (1 << 30)) != 0);
+			bool32 isDown = ((lParam & (1 << 31)) == 0);
 			if (isDown != wasDown)
 			{
 				if (VKCode == 'W')
@@ -378,7 +380,7 @@ internal LRESULT CALLBACK Win32WindowProc(HWND Window, UINT msg, WPARAM wParam, 
 
 				}
 			}
-			bool AltKeyWasDown = ((lParam & (1 << 29)) != 0);
+			bool32 AltKeyWasDown = ((lParam & (1 << 29)) != 0);
 			if ((VKCode == VK_F4) && AltKeyWasDown)
 			{
 				Running = false;
@@ -410,6 +412,12 @@ internal LRESULT CALLBACK Win32WindowProc(HWND Window, UINT msg, WPARAM wParam, 
 
 int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow)
 {
+
+	LARGE_INTEGER PerfCountFrequencyResult;
+	QueryPerformanceFrequency(&PerfCountFrequencyResult);
+	//How many counts per second a CPU is doing
+	int64 PerfCountFrequency = PerfCountFrequencyResult.QuadPart;
+
 	Win32LoadXInput();
 	WNDCLASSA windowClass = {};
 	Win32ResizeDIBSection(&GlobalBackBuffer, 1280, 720);
@@ -418,7 +426,7 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLi
 	windowClass.hInstance = hInstance;
 	windowClass.lpszClassName = "EngineClass";
 	
-	if (RegisterClass(&windowClass))
+	if (RegisterClassA(&windowClass))
 	{
 		HWND Window = CreateWindowEx(
 		0,
@@ -452,6 +460,13 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLi
 			Win32FillSoundBuffer(&SoundOutput, 0, SoundOutput.SecondaryBufferSize);
 			GlobalSecondaryBuffer->Play(0, 0, DSBPLAY_LOOPING);
 
+			//Measure Performace
+			LARGE_INTEGER LastCounter;
+			QueryPerformanceCounter(&LastCounter);
+
+			//Measure granularity of CPU cycles
+			int64 LastCycleCount = __rdtsc();
+
 			Running = true;
 			while(Running)
 			{
@@ -482,20 +497,20 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLi
 						XINPUT_GAMEPAD* Pad = &ControllerState.Gamepad;
 
 						//List of all possible buttons at XBOX controller
-						bool Up = (Pad->wButtons & XINPUT_GAMEPAD_DPAD_UP);
-						bool Left = (Pad->wButtons & XINPUT_GAMEPAD_DPAD_LEFT);
-						bool Right = (Pad->wButtons & XINPUT_GAMEPAD_DPAD_RIGHT);
-						bool Down = (Pad->wButtons & XINPUT_GAMEPAD_DPAD_DOWN);
-						bool Start = (Pad->wButtons & XINPUT_GAMEPAD_START);
-						bool Back = (Pad->wButtons & XINPUT_GAMEPAD_BACK);
-						bool LeftThumb = (Pad->wButtons & XINPUT_GAMEPAD_LEFT_THUMB);
-						bool RightThumb = (Pad->wButtons & XINPUT_GAMEPAD_RIGHT_THUMB);
-						bool LeftShoulder = (Pad->wButtons & XINPUT_GAMEPAD_LEFT_SHOULDER);
-						bool RightShoulder = (Pad->wButtons & XINPUT_GAMEPAD_RIGHT_SHOULDER);
-						bool AButton = (Pad->wButtons & XINPUT_GAMEPAD_A);
-						bool BButton = (Pad->wButtons & XINPUT_GAMEPAD_B);
-						bool XButton = (Pad->wButtons & XINPUT_GAMEPAD_X);
-						bool YButton = (Pad->wButtons & XINPUT_GAMEPAD_Y);
+						bool32 Up = (Pad->wButtons & XINPUT_GAMEPAD_DPAD_UP);
+						bool32 Left = (Pad->wButtons & XINPUT_GAMEPAD_DPAD_LEFT);
+						bool32 Right = (Pad->wButtons & XINPUT_GAMEPAD_DPAD_RIGHT);
+						bool32 Down = (Pad->wButtons & XINPUT_GAMEPAD_DPAD_DOWN);
+						bool32 Start = (Pad->wButtons & XINPUT_GAMEPAD_START);
+						bool32 Back = (Pad->wButtons & XINPUT_GAMEPAD_BACK);
+						bool32 LeftThumb = (Pad->wButtons & XINPUT_GAMEPAD_LEFT_THUMB);
+						bool32 RightThumb = (Pad->wButtons & XINPUT_GAMEPAD_RIGHT_THUMB);
+						bool32 LeftShoulder = (Pad->wButtons & XINPUT_GAMEPAD_LEFT_SHOULDER);
+						bool32 RightShoulder = (Pad->wButtons & XINPUT_GAMEPAD_RIGHT_SHOULDER);
+						bool32 AButton = (Pad->wButtons & XINPUT_GAMEPAD_A);
+						bool32 BButton = (Pad->wButtons & XINPUT_GAMEPAD_B);
+						bool32 XButton = (Pad->wButtons & XINPUT_GAMEPAD_X);
+						bool32 YButton = (Pad->wButtons & XINPUT_GAMEPAD_Y);
 
 						int16 StickX = Pad->sThumbLX;
 						int16 StickY = Pad->sThumbLY;
@@ -515,11 +530,7 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLi
 				{
 					DWORD BytesToLock = (SoundOutput.RunningSampleIndex * SoundOutput.BytesPerSample) % SoundOutput.SecondaryBufferSize;
 					DWORD BytesToWrite;
-					if (BytesToLock == PlayCursor)
-					{
-						BytesToWrite = 0;
-					}
-					else if (BytesToLock > PlayCursor)
+					if (BytesToLock > PlayCursor)
 					{
 						BytesToWrite = SoundOutput.SecondaryBufferSize - BytesToLock;
 						BytesToWrite += PlayCursor;
@@ -538,6 +549,30 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLi
 									 0, 0, Dimension.Width, Dimension.Height);
 				ReleaseDC(Window, DeviceContext);
 				++xOffset;
+
+
+				//Measure cycles of CPU for performance improvements
+				int64 EndCycleCount = __rdtsc();
+
+				//Measure timing between frames
+				LARGE_INTEGER EndCounter;
+				QueryPerformanceCounter(&EndCounter);
+
+				int64 CyclesElapsed = EndCycleCount - LastCycleCount;
+				int64 CounterElapsed = EndCounter.QuadPart - LastCounter.QuadPart;
+				int32 MSPerFrame = (int32)((1000 * CounterElapsed) / PerfCountFrequency); //Mul by 1000 gives milliseconds
+				int32 FPS = (int32)(PerfCountFrequency / CounterElapsed); // Calculate FPS
+				int32 MCPF = (int32)(CyclesElapsed / (1000 * 1000));
+				OutputDebugStringA(std::to_string(MSPerFrame).c_str());
+				OutputDebugStringA(" ms ");
+				OutputDebugStringA(std::to_string(FPS).c_str());
+				OutputDebugStringA(" FPS ");
+				OutputDebugStringA(std::to_string(MCPF).c_str());
+				OutputDebugStringA(" MegaCyclesPerFrame");
+				OutputDebugStringA("\n");
+
+				LastCounter = EndCounter;
+				LastCycleCount = EndCycleCount;
 			}
 		}
 		else
