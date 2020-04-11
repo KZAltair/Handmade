@@ -15,6 +15,14 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Handmade.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="win32_handmade.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="handmade.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
