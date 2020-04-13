@@ -28,8 +28,8 @@ RenderGradient(game_offscreen_buffer* Buffer, int xOffset, int yOffset)
 		uint32* Pixel = (uint32*)Row;
 		for (int x = 0; x < Buffer->Width; ++x)
 		{
-			uint8 Blue = x + xOffset;
-			uint8 Green = y + yOffset;
+			uint8 Blue = (x + xOffset);
+			uint8 Green = (y + yOffset);
 			*Pixel++ = ((Green << 8) | Blue);
 		}
 		Row += Buffer->Pitch;
@@ -43,25 +43,45 @@ internal void GameUpdateAndRender(game_memory* Memory, game_input* Input, game_o
 	game_state* GameState = (game_state*)Memory->PermanentStorage;
 	if (!Memory->isInitialized)
 	{
+		char FileName[] = "test.bmp";
+
+		debug_read_file_result File = DEBUGPlatformReadEntireFile(FileName);
+		if (File.Contents)
+		{
+			DEBUGPlatformFreeFileMemory(File.Contents);
+		}
+		
+
 		GameState->ToneHz = 256;
 		Memory->isInitialized = true;
 	}
 	
-
-	game_controller_input* Input0 = &Input->Controllers[0];
-	if (Input0->IsAnalog)
+	for (int ControllerIndex = 0; ControllerIndex < ArrayCount(Input->Controllers);
+		++ControllerIndex)
 	{
-		//Use analog movement
-		GameState->ToneHz = 256 + (int)(128.0f * (Input0->EndX));
-		GameState->BlueOffset += (int)4.0f * (int)(Input0->EndY);
-	}
-	else
-	{
-		//Use digital tuning
-	}
-	if (Input0->Down.EndedDown)
-	{
-		GameState->GreenOffset += 1;
+		game_controller_input* Controller = &Input->Controllers[ControllerIndex];
+		if (Controller->IsAnalog)
+		{
+			//Use analog movement
+			GameState->ToneHz = 256 + (int)(128.0f * (Controller->StickAverageY));
+			GameState->BlueOffset += (int)4.0f * (int)(Controller->StickAverageX);
+		}
+		else
+		{
+			//Use digital tuning
+			if (Controller->MoveLeft.EndedDown)
+			{
+				GameState->BlueOffset--;
+			}
+			if (Controller->MoveRight.EndedDown)
+			{
+				GameState->BlueOffset++;
+			}
+		}
+		if (Controller->ActionDown.EndedDown)
+		{
+			GameState->GreenOffset += 1;
+		}
 	}
 
 
