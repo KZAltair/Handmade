@@ -39,6 +39,7 @@ typedef double real64;
 global_variable bool32 Running;
 global_variable win32_offscreen_buffer GlobalBackBuffer;
 global_variable LPDIRECTSOUNDBUFFER GlobalSecondaryBuffer;
+global_variable int64 GlobalPerfCountFrequency;
 
 struct win32_window_dimension
 {
@@ -526,13 +527,33 @@ internal LRESULT CALLBACK Win32WindowProc(HWND Window, UINT msg, WPARAM wParam, 
 	return Result;
 }
 
+inline LARGE_INTEGER Win32GetWallClock()
+{
+	//Measure timing between frames
+	LARGE_INTEGER Result;
+	QueryPerformanceCounter(&Result);
+
+	return Result;
+}
+
+inline real32 Win32GetSecondsElapsed(LARGE_INTEGER Start, LARGE_INTEGER End)
+{
+	real32 Result = ((real32)(End.QuadPart - Start.QuadPart) / (real32)GlobalPerfCountFrequency);
+
+	return Result;
+}
+
 int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow)
 {
 
 	LARGE_INTEGER PerfCountFrequencyResult;
 	QueryPerformanceFrequency(&PerfCountFrequencyResult);
 	//How many counts per second a CPU is doing
-	int64 PerfCountFrequency = PerfCountFrequencyResult.QuadPart;
+	GlobalPerfCountFrequency = PerfCountFrequencyResult.QuadPart;
+
+	//Set windows scheduler granularity to 1MS so that sleep could be more granular
+	UINT DesiredSchedulerMS = 1;
+	bool32 SleepIsGranular = (timeBeginPeriod(DesiredSchedulerMS) == TIMERR_NOERROR);
 
 	Win32LoadXInput();
 	WNDCLASSA windowClass = {};
@@ -541,7 +562,13 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLi
 	windowClass.lpfnWndProc = Win32WindowProc;
 	windowClass.hInstance = hInstance;
 	windowClass.lpszClassName = "EngineClass";
+
+	int MonitorRefreshRateHz = 60;
+	int GameUpdateHz = MonitorRefreshRateHz / 2;
+	//1 milliseconds divided by 60HZ = how many seconds elapsed every frame
+	real32 TargetSecondPerFrame = 1.0f / (real32)GameUpdateHz; //How much time we expect to go by in seconds for every frame
 	
+
 	if (RegisterClassA(&windowClass))
 	{
 		HWND Window = CreateWindowEx(
@@ -596,8 +623,7 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLi
 				game_input* OldInput = &Input[1];
 
 				//Measure Performace
-				LARGE_INTEGER LastCounter;
-				QueryPerformanceCounter(&LastCounter);
+				LARGE_INTEGER LastCounter = Win32GetWallClock();
 
 				//Measure granularity of CPU cycles
 				int64 LastCycleCount = __rdtsc();
@@ -765,25 +791,46 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLi
 
 					}
 
+					
+
+					//Measure timing between frames
+					LARGE_INTEGER WorkCounter = Win32GetWallClock();
+					real32 WorkSecondsElapsed = Win32GetSecondsElapsed(LastCounter, WorkCounter);
+
+					real32 SecondsElapsedForFrame = WorkSecondsElapsed;
+					if (SecondsElapsedForFrame < TargetSecondPerFrame)
+					{
+						if (SleepIsGranular)
+						{
+							//Calculate the number of milliseconds left to wait for cpu to get back to work
+							DWORD SleepMS = (DWORD)(1000.0f * (TargetSecondPerFrame - SecondsElapsedForFrame));
+							if (SleepMS > 0)
+							{
+								Sleep(SleepMS);
+							}
+
+						}
+						while (SecondsElapsedForFrame < TargetSecondPerFrame)
+						{
+
+							SecondsElapsedForFrame = Win32GetSecondsElapsed(LastCounter, Win32GetWallClock());
+						}
+					}
+					else
+					{
+						//Error missed framerate
+					}
+
+					//Wait for MS to Sleep and display a frame
 					win32_window_dimension Dimension = Win32GetWindowDimension(Window);
 
 					Win32UpdateWindow(&GlobalBackBuffer, DeviceContext, Dimension.Width, Dimension.Height,
 						0, 0, Dimension.Width, Dimension.Height);
-
-
-					//Measure cycles of CPU for performance improvements
-					int64 EndCycleCount = __rdtsc();
-
-					//Measure timing between frames
-					LARGE_INTEGER EndCounter;
-					QueryPerformanceCounter(&EndCounter);
-
-					int64 CyclesElapsed = EndCycleCount - LastCycleCount;
-					int64 CounterElapsed = EndCounter.QuadPart - LastCounter.QuadPart;
+#if 0
 					int32 MSPerFrame = (int32)((1000 * CounterElapsed) / PerfCountFrequency); //Mul by 1000 gives milliseconds
 					int32 FPS = (int32)(PerfCountFrequency / CounterElapsed); // Calculate FPS
 					int32 MCPF = (int32)(CyclesElapsed / (1000 * 1000));
-#if 0
+
 					OutputDebugStringA(std::to_string(MSPerFrame).c_str());
 					OutputDebugStringA(" ms ");
 					OutputDebugStringA(std::to_string(FPS).c_str());
@@ -792,14 +839,18 @@ int CALLBACK WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLi
 					OutputDebugStringA(" MegaCyclesPerFrame");
 					OutputDebugStringA("\n");
 #endif
-
-					LastCounter = EndCounter;
-					LastCycleCount = EndCycleCount;
-
 					//Swap input
 					game_input* Temp = NewInput;
 					NewInput = OldInput;
 					OldInput = Temp;
+
+					LARGE_INTEGER EndCounter = Win32GetWallClock();
+					LastCounter = EndCounter;
+
+					//Measure cycles of CPU for performance improvements
+					int64 EndCycleCount = __rdtsc();
+					int64 CyclesElapsed = EndCycleCount - LastCycleCount;
+					LastCycleCount = EndCycleCount;
 				}
 			}
 			else
