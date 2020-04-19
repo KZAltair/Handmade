@@ -36,7 +36,7 @@ RenderGradient(game_offscreen_buffer* Buffer, int xOffset, int yOffset)
 	}
 }
 
-internal void GameUpdateAndRender(game_memory* Memory, game_input* Input, game_offscreen_buffer* Buffer, game_sound_output_buffer* SoundBuffer)
+internal void GameUpdateAndRender(game_memory* Memory, game_input* Input, game_offscreen_buffer* Buffer)
 {
 	Assert(sizeof(game_state) <= Memory->PermanentStorageSize);
 
@@ -86,6 +86,12 @@ internal void GameUpdateAndRender(game_memory* Memory, game_input* Input, game_o
 
 
 
-	GameOutputSound(SoundBuffer, GameState->ToneHz);
+
 	RenderGradient(Buffer, GameState->BlueOffset, GameState->GreenOffset);
+}
+
+internal void GameGetSoundSamples(game_memory* Memory, game_sound_output_buffer* SoundBuffer)
+{
+	game_state* GameState = (game_state*)Memory->PermanentStorage;
+	GameOutputSound(SoundBuffer, GameState->ToneHz);
 }
